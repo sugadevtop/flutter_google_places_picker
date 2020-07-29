@@ -4,7 +4,6 @@
 
 @implementation GooglePlacesPickerPlugin
 FlutterResult _result;
-UIViewController *vc;
 NSDictionary *filterTypes;
 
 + (void)registerWithRegistrar:(NSObject<FlutterPluginRegistrar>*)registrar {
@@ -15,8 +14,6 @@ NSDictionary *filterTypes;
                     @"geocode": [NSNumber numberWithInt:kGMSPlacesAutocompleteTypeFilterGeocode],
                     @"establishment": [NSNumber numberWithInt:kGMSPlacesAutocompleteTypeFilterEstablishment]
                     };
-    
-    vc = [UIApplication sharedApplication].delegate.window.rootViewController;
   FlutterMethodChannel* channel = [FlutterMethodChannel
       methodChannelWithName:@"plugin_google_place_picker"
             binaryMessenger:[registrar messenger]];
@@ -43,15 +40,13 @@ NSDictionary *filterTypes;
         FlutterError *fError = [FlutterError errorWithCode:@"API_KEY_ERROR" message:@"Invalid iOS API Key" details:nil];
         _result(fError);
     }
-    [GMSPlacesClient provideAPIKey:apiKey];
-    [GMSServices provideAPIKey:apiKey];
     _result(nil);
 }
 
 -(void)showAutocomplete:(NSString *)filter bounds:(NSDictionary *)boundsDictionary restriction:(NSDictionary *)restriction country:(NSString *)country {
-    
+
     GMSAutocompleteViewController *autocompleteController = [[GMSAutocompleteViewController alloc] init];
-    
+
     if (![filter isEqual:[NSNull null]] || ![country isEqual:[NSNull null]]) {
         GMSAutocompleteFilter *autocompleteFilter = [[GMSAutocompleteFilter alloc] init];
         if (![filter isEqual:[NSNull null]]) {
@@ -59,21 +54,21 @@ NSDictionary *filterTypes;
         } else {
             autocompleteFilter.type = kGMSPlacesAutocompleteTypeFilterNoFilter;
         }
-        
+
         if (![country isEqual:[NSNull null]]) {
             autocompleteFilter.country = country;
         }
-        
+
         autocompleteController.autocompleteFilter = autocompleteFilter;
-        
+
     }
-    
+
     if (![boundsDictionary isEqual:[NSNull null]] || ![restriction isEqual:[NSNull null]]) {
         double neLat;
         double neLng;
         double swLat;
         double swLng;
-        
+
         if (![restriction isEqual:[NSNull null]]) {
             neLat = [restriction[@"northEastLat"] doubleValue];
             neLng = [restriction[@"northEastLng"] doubleValue];
@@ -88,20 +83,40 @@ NSDictionary *filterTypes;
         }
         CLLocationCoordinate2D neCoordinate = CLLocationCoordinate2DMake(neLat, neLng);
         CLLocationCoordinate2D swCoordinate = CLLocationCoordinate2DMake(swLat, swLng);
-        
+
         GMSCoordinateBounds *bounds = [[GMSCoordinateBounds alloc] initWithCoordinate:neCoordinate coordinate:swCoordinate];
         autocompleteController.autocompleteBounds = bounds;
-        
+
     }
-    
+
     autocompleteController.delegate = self;
-    UIViewController *vc = [UIApplication sharedApplication].delegate.window.rootViewController;
-    [vc presentViewController:autocompleteController animated:YES completion:nil];
-    
+    [self.topViewController presentViewController:autocompleteController animated:YES completion:nil];
+
+}
+
+- (UIViewController *)topViewController {
+  return [self topViewControllerFromViewController:[UIApplication sharedApplication]
+                                                       .keyWindow.rootViewController];
+}
+
+- (UIViewController *)topViewControllerFromViewController:(UIViewController *)viewController {
+  if ([viewController isKindOfClass:[UINavigationController class]]) {
+    UINavigationController *navigationController = (UINavigationController *)viewController;
+    return [self
+        topViewControllerFromViewController:[navigationController.viewControllers lastObject]];
+  }
+  if ([viewController isKindOfClass:[UITabBarController class]]) {
+    UITabBarController *tabController = (UITabBarController *)viewController;
+    return [self topViewControllerFromViewController:tabController.selectedViewController];
+  }
+  if (viewController.presentedViewController) {
+    return [self topViewControllerFromViewController:viewController.presentedViewController];
+  }
+  return viewController;
 }
 
 - (void)viewController:(nonnull GMSAutocompleteViewController *)viewController didAutocompleteWithPlace:(nonnull GMSPlace *)place {
-    [vc dismissViewControllerAnimated:YES completion:nil];
+    [self.topViewController dismissViewControllerAnimated:YES completion:nil];
     NSDictionary *placeMap = @{
                                @"name" : place.name,
                                @"latitude" : [NSString stringWithFormat:@"%.7f", place.coordinate.latitude],
@@ -116,14 +131,14 @@ NSDictionary *filterTypes;
 }
 
 - (void)viewController:(nonnull GMSAutocompleteViewController *)viewController didFailAutocompleteWithError:(nonnull NSError *)error {
-    [vc dismissViewControllerAnimated:YES completion:nil];
+    [self.topViewController dismissViewControllerAnimated:YES completion:nil];
     FlutterError *fError = [FlutterError errorWithCode:@"PLACE_AUTOCOMPLETE_ERROR" message:error.localizedDescription details:nil];
-    
+
     _result(fError);
 }
 
 - (void)wasCancelled:(nonnull GMSAutocompleteViewController *)viewController {
-    [vc dismissViewControllerAnimated:YES completion:nil];
+    [self.topViewController dismissViewControllerAnimated:YES completion:nil];
     FlutterError *fError = [FlutterError errorWithCode:@"USER_CANCELED" message:@"User has canceled the operation." details:nil];
     _result(fError);
 }
